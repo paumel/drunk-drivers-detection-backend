@@ -42,16 +42,35 @@ def getLanes(image_np):
     edge_high = 200
     img_edge = cv2.Canny(img_postthresh, edge_low, edge_high)
 
+
     # Hough Line Draw
-    road_lines = cv2.HoughLinesP(img_edge, 1, np.pi/180, 20)
-    left_lane, right_lane = extract_lane(road_lines)
-    lanes = split_append(left_lane, right_lane, xsize, ysize)
+    road_lines = cv2.HoughLinesP(
+        img_edge, 
+        rho=6,
+        theta=np.pi / 180,
+        threshold=100,
+        lines=np.array([]),
+        minLineLength=20,
+        maxLineGap=100
+        )
+
+    # if road_lines is not None:
+    #     for i in range(0, len(road_lines)):
+    #         l = road_lines[i][0]
+    #         cv2.line(image_np, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA)
+    # cv2.imshow('image_testas', image_np)
+    # cv2.imshow('image_test2', img_edge)
+
+    left_lane, right_lane, left_slopes, right_slopes = extract_lane(road_lines)
+    lanes = split_append(left_lane, right_lane, xsize, ysize, left_slopes, right_slopes, image_np)
     return lanes
 
 
 def extract_lane(road_lines):
     left_lane = []
     right_lane = []
+    left_slopes = []
+    right_slopes = []
 
     if road_lines is not None:
         for x in range(0, len(road_lines)):
@@ -62,12 +81,38 @@ def extract_lane(road_lines):
                 if (slope < 0):
                     line = road_lines[x]
                     left_lane.append(road_lines[x])
+                    left_slopes.append(slope)
                 else:
                     if (slope >= 0):
                         line = road_lines[x]
                         right_lane.append(road_lines[x])
+                        right_slopes.append(slope)
+    left_slopes = cluster(left_slopes, 0.1)
+    right_slopes = cluster(right_slopes, 0.1)
+    return left_lane, right_lane, left_slopes, right_slopes
 
-    return left_lane, right_lane
+
+def cluster(data, maxgap):
+    '''Arrange data into groups where successive elements
+       differ by no more than *maxgap*
+
+        >>> cluster([1, 6, 9, 100, 102, 105, 109, 134, 139], maxgap=10)
+        [[1, 6, 9], [100, 102, 105, 109], [134, 139]]
+
+        >>> cluster([1, 6, 9, 99, 100, 102, 105, 134, 139, 141], maxgap=10)
+        [[1, 6, 9], [99, 100, 102, 105], [134, 139, 141]]
+
+    '''
+    if len(data) == 0:
+        return []
+    data.sort()
+    groups = [[data[0]]]
+    for x in data[1:]:
+        if abs(x - groups[-1][-1]) <= maxgap:
+            groups[-1].append(x)
+        else:
+            groups.append([x])
+    return groups
 
 
 def compute_slope(x1, y1, x2, y2):
@@ -75,39 +120,91 @@ def compute_slope(x1, y1, x2, y2):
         return ((y2-y1)/(x2-x1))
 
 
-def getLanesList(lanes, xsize, ysize, laneType):
+def getLanesList(lanes, xsize, ysize, laneType, slopes, image_np):
     lanes = sorted(lanes, key=lambda x : (x[0][1],x[0][0]))
+    # if laneType == 'left':
+    #     if lanes is not None:
+    #         for i in range(0, len(lanes)):
+    #             l = lanes[i][0]
+    #             cv2.line(image_np, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA)
+    # if laneType == 'right':
+    #     if lanes is not None:
+    #         for i in range(0, len(lanes)):
+    #             l = lanes[i][0]
+    #             cv2.line(image_np, (l[0], l[1]), (l[2], l[3]), (0,255,0), 3, cv2.LINE_AA)
+    # cv2.imshow('image_test3', image_np)
     lanesList = []
+    for slope in slopes:
+        lanesList.append([])
     for x in range(0, len(lanes)):
         for x1, y1, x2, y2 in lanes[x]:
-            if laneType == 'left' and (x1 >= (xsize/2) or x2 >= (xsize/2)):
-                continue
-            if laneType == 'right' and (x1 <= (xsize/2) or x2 <= (xsize/2)):
-                continue
-            appended = False
-            for index in range(0, len(lanesList)):
+            slope = compute_slope(x1, y1, x2, y2)
+            x = [x for x in slopes if slope in x][0]
+            index = slopes.index(x)
+            lanesList[index].append([x1, y1])
+            lanesList[index].append([x2, y2])
+    
+    
+    # for x in range(0, len(lanes)):
+    #     for x1, y1, x2, y2 in lanes[x]:
+    #         if laneType == 'left' and (x1 >= (xsize/2) or x2 >= (xsize/2)):
+    #             continue
+    #         if laneType == 'right' and (x1 <= (xsize/2) or x2 <= (xsize/2)):
+    #             continue
+    #         appended = False
+    #         for index in range(0, len(lanesList)):
                 
-                p1 = np.array(lanesList[index][0])
-                p2 = np.array(lanesList[index][1])
-                p3 = np.array([x1, y1])
-                p4 = np.array([x2, y2])
-                d1 = np.abs(np.cross(p2-p1, p1-p3)) / linalg.norm(p2-p1)
-                d2 = np.abs(np.cross(p2-p1, p1-p4)) / linalg.norm(p2-p1)
-                if d1 < 45 or d2 < 45:
-                    lanesList[index].append([x1, y1])
-                    lanesList[index].append([x2, y2])
-                    appended = True
-            if not appended:
-                lane = []
-                lane.append([x1, y1])
-                lane.append([x2, y2])
-                lanesList.append(lane)
+    #             p1 = np.array(lanesList[index][0])
+    #             p2 = np.array(lanesList[index][1])
+    #             p3 = np.array([x1, y1])
+    #             p4 = np.array([x2, y2])
+    #             d1 = np.abs(np.cross(p2-p1, p1-p3)) / linalg.norm(p2-p1)
+    #             d2 = np.abs(np.cross(p2-p1, p1-p4)) / linalg.norm(p2-p1)
+    #             if d1 < 30 or d2 < 30:
+    #                 lanesList[index].append([x1, y1])
+    #                 lanesList[index].append([x2, y2])
+    #                 appended = True
+    #         if not appended:
+    #             lane = []
+    #             lane.append([x1, y1])
+    #             lane.append([x2, y2])
+    #             lanesList.append(lane)
+    if laneType == 'left':
+        colors = [
+            (255,0,0),
+            (255,255,0),
+            (255,0,255),
+            (0,255,0),
+            (0,255,255),
+            (0,0,255),
+            (255,255,255),
+        ]
+    else:
+        colors = [
+            (255,255,255),
+            (0,0,255),
+            (0,255,255),
+            (0,255,0),
+            (255,0,255),
+            (255,255,0),
+            (255,0,0),
+        ]
+    # if lanesList is not None:
+    #     for j in range(0, len(lanesList)):
+    #         i = 0
+    #         while i < len(lanesList[j]):
+    #             l = lanesList[j][i]
+    #             l2 = lanesList[j][i+1]
+    #             cv2.line(image_np, (l[0], l[1]), (l2[0], l2[1]), colors[j], 3, cv2.LINE_AA)
+    #             i = i + 2
+    # cv2.imshow('image_test', image_np)
+    
     return lanesList
 
 
-def split_append(left_lanes, right_lanes, xsize, ysize):
-    leftlanesList = getLanesList(left_lanes, xsize, ysize, 'left')
-    rightlanesList = getLanesList(right_lanes, xsize, ysize,'right')
+def split_append(left_lanes, right_lanes, xsize, ysize, left_slopes, right_slopes, image_np):
+    leftlanesList = getLanesList(left_lanes, xsize, ysize, 'left', left_slopes, image_np)
+    rightlanesList = getLanesList(right_lanes, xsize, ysize,'right', right_slopes, image_np)
 
     lanesList = []
     for x in range(0, len(leftlanesList)):

@@ -80,24 +80,28 @@ def do_kdtree(combined_x_y_arrays, points):
 def lastNumberOfPoints(point, frames, framesIndex, number=10):
     count = 1
     points = []
+    framesIndexes = []
     currentPoint = point
     while framesIndex >= count and number != count:
         if len(frames[framesIndex-count]) > 0:
             dist, indexes = do_kdtree(frames[framesIndex-count], [currentPoint])
-            if dist[0] < 100:
+            if dist[0] < 25:
                 points.append(frames[framesIndex-count][indexes[0]])
+                framesIndexes.append([framesIndex-count, indexes[0]])
                 currentPoint = frames[framesIndex-count][indexes[0]]
         count += 1
-    return points
+    return points, framesIndexes
 
 
 def getCurrentFramePoints(output_dict, MIN_SCORE, height, width):
     boxesIndex = 0
-    currentFrame = []
+    currentFramePoints = []
+    currentFrameLines = []
     while output_dict['detection_scores'][boxesIndex] > MIN_SCORE:
         box = output_dict['detection_boxes'][boxesIndex]
         (ymin, xmin, ymax, xmax) = (box[0]*height, box[1]*width, box[2]*height, box[3]*width)
         (x_avg, y_avg) = ((xmin+xmax)/2, (ymin+ymax)/2)
-        currentFrame.append([x_avg, y_avg])
+        currentFramePoints.append([x_avg, y_avg])
+        currentFrameLines.append([xmin, xmax, ymax])
         boxesIndex += 1
-    return currentFrame
+    return currentFramePoints, currentFrameLines
