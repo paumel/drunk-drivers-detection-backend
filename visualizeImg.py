@@ -18,7 +18,7 @@ def visualizeCars(image_np, output_dict, MIN_SCORE):
         line_thickness=5)
 
 
-def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoints, frameLines, framesIndex, allLines):
+def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes):
     for i in range(len(currentFrame)):
         color = tuple(np.random.randint(256, size=3))
         color = (int(color[0]), int(color[1]), int(color[2]))
@@ -42,12 +42,34 @@ def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoint
             y1.append(frameLines[indexes[0]][indexes[1]][2])
             x2.append(int(round(frameLines[indexes[0]][indexes[1]][1])))
             y2.append(int(round(frameLines[indexes[0]][indexes[1]][2])))
+            if indexes in drunkIndexes:
+                # cv2.line(image_np, (
+                #     int(round(currentFrameLines[i][0])),
+                #     int(round(currentFrameLines[i][2]))
+                # ), (
+                #     int(round(currentFrameLines[i][1])),
+                #     int(round(currentFrameLines[i][2]))
+                # ), (0, 0, 255), 3)
+                cv2.rectangle(image_np, (
+                    int(round(currentFrameBoxes[i][0])),
+                    int(round(currentFrameBoxes[i][1]))
+                ), (
+                    int(round(currentFrameBoxes[i][2])),
+                    int(round(currentFrameBoxes[i][3]))
+                ), (0, 0, 255), 4)
 
-        drawPolyline(x1, y1, image_np, color, allLines, currentFrameLines[i])
-        drawPolyline(x2, y2, image_np, color, allLines, currentFrameLines[i])
+        drunk1 = drawPolyline(x1, y1, image_np, color, allLines, currentFrameLines[i])
+        drunk2 = drawPolyline(x2, y2, image_np, color, allLines, currentFrameLines[i])
+
+        if drunk1 or drunk2:
+            for indexes in framesIndexes:
+                if indexes not in drunkIndexes:
+                    drunkIndexes.append(indexes)
+    return drunkIndexes
 
 
 def drawPolyline(x, y, img, color, allLines, currentCar):
+    drunk = False
     if len(x) > 1 and len(y) > 1:
         try:
             z = np.polyfit(x, y, 2)
@@ -77,12 +99,14 @@ def drawPolyline(x, y, img, color, allLines, currentCar):
                         int(round(currentCar[1])),
                         int(round(currentCar[2]))
                     ), (0, 0, 255), 3)
+                    drunk = True
 
 
             draw_points = (np.asarray([draw_x, draw_y]).T).astype(np.int32)
             cv2.polylines(img, [draw_points], False, tuple(color), thickness=3)
         except ValueError:
             print('All zero values in polyfit')
+    return drunk
 
 
 def ransac_drawlane(lanes, frame):

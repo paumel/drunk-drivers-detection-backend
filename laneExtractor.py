@@ -3,7 +3,7 @@ from numpy import linalg
 from cv2 import cv2
 
 
-def getLanes(image_np):
+def getLanes(image_np, output_dict, MIN_SCORE, height, width):
     img_gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
     img_hsv = cv2.cvtColor(image_np, cv2.COLOR_BGR2HLS)
     ysize = img_gray.shape[0]
@@ -60,6 +60,23 @@ def getLanes(image_np):
     #         cv2.line(image_np, (l[0], l[1]), (l[2], l[3]), (0,0,255), 3, cv2.LINE_AA)
     # cv2.imshow('image_testas', image_np)
     # cv2.imshow('image_test2', img_edge)
+
+    indexesToDelete = []
+    if road_lines is not None:
+        for x in range(0, len(road_lines)):
+            for x1, y1, x2, y2 in road_lines[x]:
+                boxesIndex = 0
+                while output_dict['detection_scores'][boxesIndex] > MIN_SCORE:
+                    box = output_dict['detection_boxes'][boxesIndex]
+                    (ymin, xmin, ymax, xmax) = (box[0]*height, box[1]*width, box[2]*height, box[3]*width)
+                    if (xmin <= x1 and x1 <= xmax and ymin <= y1 and y1 <= ymax) or (xmin <= x2 and x2 <= xmax and ymin <= y2 and y2 <= ymax):
+                        indexesToDelete.append(x)
+                        break
+                    boxesIndex += 1
+
+    indexesToDelete.sort(reverse=True)
+    for indexToDelete in indexesToDelete:
+        road_lines = np.delete(road_lines, indexToDelete, axis=0)
 
     left_lane, right_lane, left_slopes, right_slopes = extract_lane(road_lines)
     lanes = split_append(left_lane, right_lane, xsize, ysize, left_slopes, right_slopes, image_np)

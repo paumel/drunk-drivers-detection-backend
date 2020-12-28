@@ -121,6 +121,8 @@ def get_all_users(current_user):
 
 framePoints = []
 frameLines = []
+frameBoxes = []
+drunkIndexes = []
 framesIndex = 0
 @app.route('/process', methods=['GET', 'POST'])
 @token_required
@@ -128,43 +130,38 @@ def process(current_user):
     if request.method == 'POST':
         global framePoints
         global frameLines
+        global frameBoxes
+        global drunkIndexes
         global framesIndex
-        print('opa')
-        start = time.time()
+
         base64_image_str = request.form['file']
         base64_image_str = base64_image_str[base64_image_str.find(",")+1:]
         base64_decoded = base64.b64decode(base64_image_str)
-        end = time.time()
-        print(end - start)
+
         image = Image.open(io.BytesIO(base64_decoded))
         image.save('uploads/python.jpg')
         # # f = request.files['file']
         # # f.save('uploads/python.jpg')
-        end = time.time()
-        print(end - start)
+
         img = cv2.imread('uploads/python.jpg')
         img = cv2.resize(img, (1280, 720))
         image_np = np.array(img)
-        end = time.time()
-        print(end - start)
+
         output_dict = carDetector.run_inference_for_single_image(detection_model, image_np)
         height, width, _ = img.shape
-        end = time.time()
-        print(end - start)
-        currentFramePoints, currentFrameLines = carDetector.getCurrentFramePoints(output_dict, MIN_SCORE, height, width)
+
+        currentFramePoints, currentFrameLines, currentFrameBoxes = carDetector.getCurrentFramePoints(output_dict, MIN_SCORE, height, width)
         framePoints.append(currentFramePoints)
         frameLines.append(currentFrameLines)
-        end = time.time()
-        print(end - start)
-        lanes = laneExtractor.getLanes(image_np)
+        frameBoxes.append(currentFrameBoxes)
+
+        lanes = laneExtractor.getLanes(image_np, output_dict, MIN_SCORE, height, width)
         image_np, allLines = visualizeImg.ransac_drawlane(lanes, image_np)
-        end = time.time()
-        print(end - start)
+
         visualizeImg.visualizeCars(image_np, output_dict, MIN_SCORE)
-        visualizeImg.visualizeCarTrajectory(image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines)
+        drunkIndexes = visualizeImg.visualizeCarTrajectory(image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes)
         framesIndex += 1
-        end = time.time()
-        print(end - start)
+
         cv2.imwrite('uploads/python.jpg', image_np)
 
         return send_file('uploads/python.jpg', attachment_filename='python.jpg')

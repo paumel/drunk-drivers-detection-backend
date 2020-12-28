@@ -97,11 +97,13 @@ def getCurrentFramePoints(output_dict, MIN_SCORE, height, width):
     boxesIndex = 0
     currentFramePoints = []
     currentFrameLines = []
+    currentFrameBoxes = []
     while output_dict['detection_scores'][boxesIndex] > MIN_SCORE:
         box = output_dict['detection_boxes'][boxesIndex]
         (ymin, xmin, ymax, xmax) = (box[0]*height, box[1]*width, box[2]*height, box[3]*width)
         (x_avg, y_avg) = ((xmin+xmax)/2, (ymin+ymax)/2)
         currentFramePoints.append([x_avg, y_avg])
         currentFrameLines.append([xmin, xmax, ymax])
+        currentFrameBoxes.append([xmin, ymin, xmax, ymax])
         boxesIndex += 1
-    return currentFramePoints, currentFrameLines
+    return currentFramePoints, currentFrameLines, currentFrameBoxes
