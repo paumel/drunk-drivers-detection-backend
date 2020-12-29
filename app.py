@@ -14,7 +14,7 @@ import visualizeImg
 import pafy
 from cv2 import cv2
 import numpy as np
-
+from sqlalchemy import desc
 from PIL import Image
 import base64
 import io
@@ -30,6 +30,7 @@ detection_model = carDetector.load_model()
 global framePoints
 global frameLines
 global framesIndex
+global visualize
 
 MIN_SCORE = 0.8
 # framePoints = []
@@ -74,7 +75,7 @@ def token_required(f):
             current_user = Users.query.filter_by(
                 public_id=data['public_id']).first()
         except:
-            return jsonify({'message': 'token is invalid'})
+            return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "token expired"'})
         return f(current_user, *args, **kwargs)
     return decorator
 
@@ -133,7 +134,7 @@ def get_all_users(current_user):
 @token_required
 def get_all_drivers(current_user):
 
-    drivers = Drivers.query.all()
+    drivers = Drivers.query.order_by(desc(Drivers.date)).all()
 
     result = []
 
@@ -154,6 +155,7 @@ frameLines = []
 frameBoxes = []
 drunkIndexes = []
 framesIndex = 0
+visualize = True
 
 
 @app.route('/process', methods=['GET', 'POST'])
@@ -165,6 +167,7 @@ def process(current_user):
         global frameBoxes
         global drunkIndexes
         global framesIndex
+        global visualize
 
         base64_image_str = request.form['file']
         base64_image_str = base64_image_str[base64_image_str.find(",")+1:]
@@ -178,6 +181,7 @@ def process(current_user):
         img = cv2.imread('uploads/python.jpg')
         img = cv2.resize(img, (1280, 720))
         image_np = np.array(img)
+        image_np_original = np.array(img)
 
         output_dict = carDetector.run_inference_for_single_image(
             detection_model, image_np)
@@ -191,11 +195,12 @@ def process(current_user):
 
         lanes = laneExtractor.getLanes(
             image_np, output_dict, MIN_SCORE, height, width)
-        image_np, allLines = visualizeImg.ransac_drawlane(lanes, image_np)
+        image_np, allLines = visualizeImg.ransac_drawlane(lanes, image_np, visualize)
 
-        visualizeImg.visualizeCars(image_np, output_dict, MIN_SCORE)
+        if visualize:
+            visualizeImg.visualizeCars(image_np, output_dict, MIN_SCORE)
         drunkIndexes, drunkImages = visualizeImg.visualizeCarTrajectory(
-            image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes)
+            image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes, image_np_original, visualize)
         
         if drunkImages is not None and drunkImages is not False and len(drunkImages) > 0:
             for image in drunkImages:

@@ -18,7 +18,7 @@ def visualizeCars(image_np, output_dict, MIN_SCORE):
         line_thickness=5)
 
 
-def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes):
+def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes, image_np_original, visualize):
     drunkImages = []
     for i in range(len(currentFrame)):
         color = tuple(np.random.randint(256, size=3))
@@ -59,8 +59,8 @@ def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoint
                     int(round(currentFrameBoxes[i][3]))
                 ), (0, 0, 255), 4)
 
-        drunk1, drunkImage1 = drawPolyline(x1, y1, image_np, color, allLines, currentFrameLines[i])
-        drunk2, drunkImage2 = drawPolyline(x2, y2, image_np, color, allLines, currentFrameLines[i])
+        drunk1, drunkImage1 = drawPolyline(x1, y1, image_np, color, allLines, currentFrameLines[i], currentFrameBoxes[i], image_np_original, visualize)
+        drunk2, drunkImage2 = drawPolyline(x2, y2, image_np, color, allLines, currentFrameLines[i], currentFrameBoxes[i], image_np_original, visualize)
 
         if drunk1 or drunk2:
             if drunkImage1 is not False:
@@ -73,7 +73,7 @@ def visualizeCarTrajectory(image_np, currentFrame, currentFrameLines, framePoint
     return drunkIndexes, drunkImages
 
 
-def drawPolyline(x, y, img, color, allLines, currentCar):
+def drawPolyline(x, y, img, color, allLines, currentCar, currentRectangle, image_np_original, visualize):
     drunk = False
     drunkImage = False
     if len(x) > 1 and len(y) > 1:
@@ -87,16 +87,17 @@ def drawPolyline(x, y, img, color, allLines, currentCar):
                 line_x = [line[0][0], line[1][0]]
                 line_y = [line[0][1], line[1][1]]
                 x,y = intersect.intersection(draw_x, draw_y, line_x, line_y)
-                for i, x_coord in enumerate(x):
-                    cv2.circle(
-                        img, (
-                            int(round(x_coord)),
-                            int(round(y[i]))
-                        ),
-                        7,
-                        (0, 0, 255),
-                        -1
-                    )
+                if visualize:
+                    for i, x_coord in enumerate(x):
+                        cv2.circle(
+                            img, (
+                                int(round(x_coord)),
+                                int(round(y[i]))
+                            ),
+                            7,
+                            (0, 0, 255),
+                            -1
+                        )
                 if len(x) >= 2:
                     cv2.line(img, (
                         int(round(currentCar[0])),
@@ -106,17 +107,27 @@ def drawPolyline(x, y, img, color, allLines, currentCar):
                         int(round(currentCar[2]))
                     ), (0, 0, 255), 3)
                     drunk = True
-                    drunkImage = img
+
+                    cv2.rectangle(image_np_original, (
+                        int(round(currentRectangle[0])),
+                        int(round(currentRectangle[1]))
+                    ), (
+                        int(round(currentRectangle[2])),
+                        int(round(currentRectangle[3]))
+                    ), (0, 0, 255), 4)
+                    
+                    drunkImage = image_np_original
 
 
-            draw_points = (np.asarray([draw_x, draw_y]).T).astype(np.int32)
-            cv2.polylines(img, [draw_points], False, tuple(color), thickness=3)
+            if visualize:
+                draw_points = (np.asarray([draw_x, draw_y]).T).astype(np.int32)
+                cv2.polylines(img, [draw_points], False, tuple(color), thickness=3)
         except ValueError:
             print('All zero values in polyfit')
     return drunk, drunkImage
 
 
-def ransac_drawlane(lanes, frame):
+def ransac_drawlane(lanes, frame, visualize):
     allLines = []
     for lane_sa in lanes:
         if lane_sa.size <= 4:
@@ -161,10 +172,12 @@ def ransac_drawlane(lanes, frame):
             continue
         x_2 = int(x_2_float)
 
-        cv2.line(frame, (x_1, y_1), (x_2, y_2), (0, 255, 255), 3)
+        if visualize:
+            cv2.line(frame, (x_1, y_1), (x_2, y_2), (0, 255, 255), 3)
         allLines.append([[x_1, y_1], [x_2, y_2]])
     mask_color = (255, 255, 0)
     frame_copy = frame.copy()
     opacity = 0.4
-    cv2.addWeighted(frame_copy, opacity, frame, 1-opacity, 0, frame)
+    if visualize:
+        cv2.addWeighted(frame_copy, opacity, frame, 1-opacity, 0, frame)
     return frame, allLines
