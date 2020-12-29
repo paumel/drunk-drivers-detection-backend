@@ -1,4 +1,5 @@
 exported_model/
 exported_model_moved/
 __pycache__/
+.vscode
 uploads/*

@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import jwt
+from datetime import datetime
 import datetime
 from functools import wraps
 import time
@@ -13,7 +14,6 @@ import visualizeImg
 import pafy
 from cv2 import cv2
 import numpy as np
-
 
 from PIL import Image
 import base64
@@ -31,17 +31,16 @@ global framePoints
 global frameLines
 global framesIndex
 
-MIN_SCORE = 0.6
+MIN_SCORE = 0.8
 # framePoints = []
 # frameLines = []
 # framesIndex = 0
 
 app.config['SECRET_KEY'] = 'Th1s1ss3cr3t'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://///home/user/Documents/Projects/DrunkDriversDetector/library.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://///home/user/Documents/Projects/drunk-drivers-detection/library.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 
 db = SQLAlchemy(app)
-
 
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -50,6 +49,17 @@ class Users(db.Model):
     password = db.Column(db.String(50))
     admin = db.Column(db.Boolean)
 
+
+class Drivers(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer)
+    date = db.Column(db.DateTime)
+    image = db.Column(db.LargeBinary)
+    drunk = db.Column(db.Boolean)
+
+
+# from app import db
+# db.create_all()
 
 def token_required(f):
     @wraps(f)
@@ -91,7 +101,7 @@ def login_user():
 
     user = Users.query.filter_by(name=auth['email']).first()
 
-    if check_password_hash(user.password, auth['password']):
+    if user is not None and check_password_hash(user.password, auth['password']):
         token = jwt.encode({'public_id': user.public_id, 'exp': datetime.datetime.utcnow(
         ) + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'])
         return jsonify({'token': token.decode('UTF-8')})
@@ -119,11 +129,33 @@ def get_all_users(current_user):
     return jsonify({'users': result})
 
 
+@app.route('/drivers', methods=['GET'])
+@token_required
+def get_all_drivers(current_user):
+
+    drivers = Drivers.query.all()
+
+    result = []
+
+    for driver in drivers:
+        driver_data = {}
+        driver_data['id'] = driver.id
+        driver_data['date'] = driver.date
+        driver_data['image'] = base64.b64encode(driver.image)
+        driver_data['drunk'] = driver.drunk
+
+        result.append(driver_data)
+
+    return jsonify({'drivers': result})
+
+
 framePoints = []
 frameLines = []
 frameBoxes = []
 drunkIndexes = []
 framesIndex = 0
+
+
 @app.route('/process', methods=['GET', 'POST'])
 @token_required
 def process(current_user):
@@ -147,19 +179,32 @@ def process(current_user):
         img = cv2.resize(img, (1280, 720))
         image_np = np.array(img)
 
-        output_dict = carDetector.run_inference_for_single_image(detection_model, image_np)
+        output_dict = carDetector.run_inference_for_single_image(
+            detection_model, image_np)
         height, width, _ = img.shape
 
-        currentFramePoints, currentFrameLines, currentFrameBoxes = carDetector.getCurrentFramePoints(output_dict, MIN_SCORE, height, width)
+        currentFramePoints, currentFrameLines, currentFrameBoxes = carDetector.getCurrentFramePoints(
+            output_dict, MIN_SCORE, height, width)
         framePoints.append(currentFramePoints)
         frameLines.append(currentFrameLines)
         frameBoxes.append(currentFrameBoxes)
 
-        lanes = laneExtractor.getLanes(image_np, output_dict, MIN_SCORE, height, width)
+        lanes = laneExtractor.getLanes(
+            image_np, output_dict, MIN_SCORE, height, width)
         image_np, allLines = visualizeImg.ransac_drawlane(lanes, image_np)
 
         visualizeImg.visualizeCars(image_np, output_dict, MIN_SCORE)
-        drunkIndexes = visualizeImg.visualizeCarTrajectory(image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes)
+        drunkIndexes, drunkImages = visualizeImg.visualizeCarTrajectory(
+            image_np, currentFramePoints, currentFrameLines, framePoints, frameLines, framesIndex, allLines, drunkIndexes, currentFrameBoxes)
+        
+        if drunkImages is not None and drunkImages is not False and len(drunkImages) > 0:
+            for image in drunkImages:
+                now = datetime.datetime.now()
+                success, encoded_image = cv2.imencode('.jpg', image)
+                new_driver = Drivers(user_id=current_user.id,
+                     date=now, image=encoded_image.tobytes(), drunk=False)
+                db.session.add(new_driver)
+                db.session.commit()
         framesIndex += 1
 
         cv2.imwrite('uploads/python.jpg', image_np)
