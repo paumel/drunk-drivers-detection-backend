@@ -104,7 +104,7 @@ def login_user():
 
     if user is not None and check_password_hash(user.password, auth['password']):
         token = jwt.encode({'public_id': user.public_id, 'exp': datetime.datetime.utcnow(
-        ) + datetime.timedelta(minutes=30)}, app.config['SECRET_KEY'])
+        ) + datetime.timedelta(minutes=180)}, app.config['SECRET_KEY'])
         return jsonify({'token': token.decode('UTF-8')})
 
     return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "login required"'})
@@ -133,21 +133,34 @@ def get_all_users(current_user):
 @app.route('/drivers', methods=['GET'])
 @token_required
 def get_all_drivers(current_user):
-
-    drivers = Drivers.query.order_by(desc(Drivers.date)).all()
+    d1 = datetime.datetime.strptime(request.args.get('date'),"%Y-%m-%dT%H:%M:%S.%fZ")
+    date = d1.strftime("%Y-%m-%d")
+    search = "%{}%".format(date)
+    drivers = Drivers.query.filter_by(user_id=current_user.id).filter(Drivers.date.like(search)).order_by(desc(Drivers.date)).all()
 
     result = []
 
     for driver in drivers:
         driver_data = {}
         driver_data['id'] = driver.id
-        driver_data['date'] = driver.date
+        driver_data['date'] = driver.date.strftime("%Y-%m-%d %H:%M:%S")
         driver_data['image'] = base64.b64encode(driver.image)
         driver_data['drunk'] = driver.drunk
 
         result.append(driver_data)
 
     return jsonify({'drivers': result})
+
+
+@app.route('/drivers', methods=['POST'])
+@token_required
+def update_driver(current_user):
+
+    driver = Drivers.query.get(request.form['driver_id'])
+    driver.drunk = not driver.drunk
+    db.session.commit()
+
+    return jsonify({'success': 'driver edited successfully'})
 
 
 framePoints = []
