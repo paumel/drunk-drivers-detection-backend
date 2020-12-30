@@ -31,6 +31,7 @@ global framePoints
 global frameLines
 global framesIndex
 global visualize
+global white
 
 MIN_SCORE = 0.8
 # framePoints = []
@@ -163,12 +164,34 @@ def update_driver(current_user):
     return jsonify({'success': 'driver edited successfully'})
 
 
+@app.route('/parameters', methods=['GET'])
+@token_required
+def get_params(current_user):
+    global visualize
+    global white
+    return jsonify({
+        'visualize': visualize,
+        'white': white
+    })
+
+
+@app.route('/parameters', methods=['POST'])
+@token_required
+def set_params(current_user):
+    global visualize
+    global white
+    visualize = request.form['visualize'] == 'true'
+    white = int(request.form['white'])
+    return jsonify({'success': 'parameters edited successfully'})
+
+
 framePoints = []
 frameLines = []
 frameBoxes = []
 drunkIndexes = []
 framesIndex = 0
 visualize = True
+white = 150
 
 
 @app.route('/process', methods=['GET', 'POST'])
@@ -181,6 +204,7 @@ def process(current_user):
         global drunkIndexes
         global framesIndex
         global visualize
+        global white
 
         base64_image_str = request.form['file']
         base64_image_str = base64_image_str[base64_image_str.find(",")+1:]
@@ -207,7 +231,7 @@ def process(current_user):
         frameBoxes.append(currentFrameBoxes)
 
         lanes = laneExtractor.getLanes(
-            image_np, output_dict, MIN_SCORE, height, width)
+            image_np, output_dict, MIN_SCORE, height, width, white)
         image_np, allLines = visualizeImg.ransac_drawlane(lanes, image_np, visualize)
 
         if visualize:

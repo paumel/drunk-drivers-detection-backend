@@ -3,7 +3,7 @@ from numpy import linalg
 from cv2 import cv2
 
 
-def getLanes(image_np, output_dict, MIN_SCORE, height, width):
+def getLanes(image_np, output_dict, MIN_SCORE, height, width, white):
     img_gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
     img_hsv = cv2.cvtColor(image_np, cv2.COLOR_BGR2HLS)
     ysize = img_gray.shape[0]
@@ -13,7 +13,7 @@ def getLanes(image_np, output_dict, MIN_SCORE, height, width):
     low_yellow = np.array([20, 100, 100])
     high_yellow = np.array([30, 255, 255])
     mask_yellow = cv2.inRange(img_hsv, low_yellow, high_yellow)
-    mask_white = cv2.inRange(img_gray, 150, 255)
+    mask_white = cv2.inRange(img_gray, white, 255)
 
     mask_yw = cv2.bitwise_or(mask_yellow, mask_white)
     mask_onimage = cv2.bitwise_and(img_gray, mask_yw)
